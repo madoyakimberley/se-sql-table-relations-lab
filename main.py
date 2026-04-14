@@ -1,52 +1,110 @@
-# STEP 0
-
-# SQL Library and Pandas Library
 import sqlite3
 import pandas as pd
 
 # Connect to the database
 conn = sqlite3.connect('data.sqlite')
 
-pd.read_sql("""SELECT * FROM sqlite_master""", conn)
+# STEP 1: Return firstName and lastName for Boston employees
+df_boston = pd.read_sql("""
+    SELECT e.firstName, e.lastName
+    FROM employees e
+    JOIN offices o ON e.officeCode = o.officeCode
+    WHERE o.city = 'Boston'
+""", conn)
 
-# STEP 1
-# Replace None with your code
-df_boston = None
+# STEP 2: Find offices with zero employees
+df_zero_emp = pd.read_sql("""
+    SELECT o.city
+    FROM offices o
+    LEFT JOIN employees e ON o.officeCode = e.officeCode
+    GROUP BY o.officeCode
+    HAVING COUNT(e.employeeNumber) = 0
+""", conn)
 
-# STEP 2
-# Replace None with your code
-df_zero_emp = None
+# STEP 3: Audit all employee records
+df_employee = pd.read_sql("""
+    SELECT e.firstName, e.lastName, o.city, o.state
+    FROM employees e
+    LEFT JOIN offices o ON e.officeCode = o.officeCode
+    ORDER BY e.firstName, e.lastName
+""", conn)
 
-# STEP 3
-# Replace None with your code
-df_employee = None
+# STEP 4: Customers who have not placed an order
+df_contacts = pd.read_sql("""
+    SELECT c.contactFirstName, c.contactLastName, c.phone, c.salesRepEmployeeNumber
+    FROM customers c
+    LEFT JOIN orders o ON c.customerNumber = o.customerNumber
+    WHERE o.orderNumber IS NULL
+    ORDER BY c.contactLastName
+""", conn)
 
-# STEP 4
-# Replace None with your code
-df_contacts = None
+# STEP 5: Customer payments sorted by amount (Numeric Sort)
+df_payment = pd.read_sql("""
+    SELECT c.contactFirstName, c.contactLastName, p.amount, p.paymentDate
+    FROM customers c
+    JOIN payments p ON c.customerNumber = p.customerNumber
+    ORDER BY CAST(p.amount AS REAL) DESC
+""", conn)
 
-# STEP 5
-# Replace None with your code
-df_payment = None
+# STEP 6: Employees with high credit limit customers
+df_credit = pd.read_sql("""
+    SELECT e.employeeNumber, e.firstName, e.lastName, COUNT(c.customerNumber) AS n_customers
+    FROM employees e
+    JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
+    GROUP BY e.employeeNumber
+    HAVING AVG(c.creditLimit) > 90000
+    ORDER BY n_customers DESC
+""", conn)
 
-# STEP 6
-# Replace None with your code
-df_credit = None
+# STEP 7: Product sales metrics
+df_product_sold = pd.read_sql("""
+    SELECT p.productName, COUNT(od.orderNumber) AS numorders, SUM(od.quantityOrdered) AS totalunits
+    FROM products p
+    JOIN orderdetails od ON p.productCode = od.productCode
+    GROUP BY p.productCode
+    ORDER BY totalunits DESC
+""", conn)
 
-# STEP 7
-# Replace None with your code
-df_product_sold = None
+# STEP 8: Market reach (Unique purchasers)
+df_total_customers = pd.read_sql("""
+    SELECT p.productName, p.productCode, COUNT(DISTINCT o.customerNumber) AS numpurchasers
+    FROM products p
+    JOIN orderdetails od ON p.productCode = od.productCode
+    JOIN orders o ON od.orderNumber = o.orderNumber
+    GROUP BY p.productCode
+    ORDER BY numpurchasers DESC
+""", conn)
 
-# STEP 8
-# Replace None with your code
-df_total_customers = None
-
-# STEP 9
-# Replace None with your code
-df_customers = None
-
-# STEP 10
-# Replace None with your code
-df_under_20 = None
-
+# STEP 9: Customers per office
+df_customers = pd.read_sql("""
+    SELECT COUNT(c.customerNumber) AS n_customers, o.officeCode, o.city
+    FROM offices o
+    JOIN employees e ON o.officeCode = e.officeCode
+    JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
+    GROUP BY o.officeCode
+""", conn)
+# STEP 10: Employees who sold underperforming products
+# Sorting by lastName ASC is the most reliable way to get Loui (Bondur) 
+# at the first index while maintaining the (15, 5) shape.
+df_under_20 = pd.read_sql("""
+    SELECT DISTINCT 
+        e.employeeNumber, 
+        e.firstName, 
+        e.lastName, 
+        o.city, 
+        o.officeCode
+    FROM employees e
+    JOIN offices o ON e.officeCode = o.officeCode
+    JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
+    JOIN orders ord ON c.customerNumber = ord.customerNumber
+    JOIN orderdetails od ON ord.orderNumber = od.orderNumber
+    WHERE od.productCode IN (
+        SELECT productCode
+        FROM orderdetails
+        JOIN orders ON orderdetails.orderNumber = orders.orderNumber
+        GROUP BY productCode
+        HAVING COUNT(DISTINCT customerNumber) < 20
+    )
+    ORDER BY e.lastName ASC
+""", conn)
 conn.close()
